@@ -1,22 +1,27 @@
 import {db,json,input,quoteFrom,liveAllowed,report,transaction,stripeClient,uuid,SKU} from '../lib/server.mjs';
 import {issueTrackingToken,trackingReady} from '../lib/tracking-token.mjs';
+import {exactOrigin,safeTotal} from '../lib/security.mjs';
+import {withinBudget} from '../lib/rate-limit.mjs';
 export async function POST(req){
  if(!trackingReady(process.env.ORDER_TRACKING_KEY))return json({error:'CHECKOUT_DISABLED'},503);
  if(!liveAllowed())return json({error:'CHECKOUT_DISABLED'},503);
- let x;try{x=await input(req);if(!uuid.test(x.request_id))throw Error()}catch{return json({error:'INVALID_REQUEST'},400)}
+ let x;try{x=await input(req);if(typeof x.request_id!=='string'||!uuid.test(x.request_id)||!Number.isSafeInteger(x.expected_total_cents)||x.expected_total_cents<=0)throw Error()}catch{return json({error:'INVALID_REQUEST'},400)}
  const origin=process.env.STORE_ORIGIN;
- if(!origin||!/^https:\/\/[a-z0-9.-]+$/i.test(origin)||req.headers.get('origin')!==origin)return json({error:'INVALID_ORIGIN'},403);
+ if(!exactOrigin(req,origin))return json({error:'INVALID_ORIGIN'},403);
  try{
+ if(!await withinBudget('checkout'))return json({error:'RATE_LIMITED'},429);
  const order=await transaction(async c=>{
    // Per-request lock prevents double reservation during concurrent retries.
    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[x.request_id]);
    const existing=(await c.query('SELECT o.*,r.expires_at,i.quantity,i.unit_price_cents FROM commerce.orders o JOIN commerce.reservations r ON r.order_id=o.id JOIN commerce.order_items i ON i.order_id=o.id WHERE o.id=$1',[x.request_id])).rows[0];
    if(existing){
+    if(!safeTotal(x.expected_total_cents,existing.total_cents))return {error:'QUOTE_CHANGED'};
     if(existing.country_code!==x.country||existing.shipping_method!==x.method||existing.quantity!==x.quantity||existing.payment_status!=='pending'||new Date(existing.expires_at).getTime()<Date.now()+31*60000)return {error:'REQUEST_EXPIRED_OR_CHANGED'};
     return existing;
    }
    const q=await quoteFrom(c,x,true);
    if(!q.ok)return {error:q.code};
+   if(!safeTotal(x.expected_total_cents,q.pre_tax_total_cents))return {error:'QUOTE_CHANGED'};
    const expiry=new Date(Math.floor(Date.now()/1000)*1000+7200000);
    await c.query('UPDATE commerce.inventory SET reserved=reserved+$1 WHERE sku=$2',[q.quantity,SKU]);
    const o=(await c.query('INSERT INTO commerce.orders(id,currency,country_code,shipping_method,subtotal_cents,shipping_cents,total_cents) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[x.request_id,q.currency,q.country,q.method,q.subtotal_cents,q.shipping_cents,q.pre_tax_total_cents])).rows[0];
