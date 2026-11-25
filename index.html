@@ -51,7 +51,7 @@ function syncSticky(){const r=frame.getBoundingClientRect();frame.style.setPrope
 window.addEventListener('scroll',syncSticky,{passive:true});window.addEventListener('resize',syncSticky);new ResizeObserver(syncSticky).observe(frame);syncSticky();
 // Keyboard focus confinement for prototype dialogs.
 let modalFocus=null;const prevShow=showModal;showModal=function(s){modalFocus=document.activeElement;prevShow(s)};const prevClose=closeModal;closeModal=function(){prevClose();modalFocus?.focus()};document.querySelector('#closemodal').onclick=closeModal;document.querySelector('#okmodal').onclick=closeModal;
-document.addEventListener('keydown',e=>{if(e.key!=='Tab')return;const active=document.querySelector('.modal.open')||document.querySelector('.drawer.open');if(!active)return;const f=[...active.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),summary')].filter(el=>el.getClientRects().length);if(!f.length)return;if(e.shiftKey&&(document.activeElement===f[0]||!active.contains(document.activeElement))){e.preventDefault();f.at(-1).focus()}else if(!e.shiftKey&&(document.activeElement===f.at(-1)||!active.contains(document.activeElement))){e.preventDefault();f[0].focus()}});
+document.addEventListener('keydown',e=>{if(e.key!=='Tab')return;const active=document.querySelector('.modal.open')||document.querySelector('.drawer.open');if(!active)return;const f=[...active.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),summary')].filter(el=>el.getClientRects().length);if(!f.length)return;if(e.shiftKey&&(document.activeElement===f[0]||!active.contains(document.activeElement))){e.preventDefault();f.at(-1).focus()}else if(!e.shiftKey&&(document.activeElement===f.at(-1)||!active.contains(document.activeElement))){e.preventDefault();f[0].focus()}});
 
 let destination='';
 function wireCheckout(){
@@ -88,8 +88,8 @@ function wireCheckout(){
   document.querySelectorAll('#cartcontent .qty button,#cartcontent input').forEach(e=>e.disabled=true);
   status.textContent='Opening secure checkout…';
   try{
-   const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...x,request_id:checkoutRequest}),cache:'no-store'});const d=await r.json();
-   if(!r.ok||typeof d.url!=='string')throw Error();
+   const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...x,request_id:checkoutRequest,expected_total_cents:activeQuote.pre_tax_total_cents}),cache:'no-store'});const d=await r.json();
+   if(d.error==='QUOTE_CHANGED'){resetQuote();checkoutBusy=false;cart();return}if(!r.ok||typeof d.url!=='string')throw Error();
    const url=new URL(d.url);if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com')throw Error();
    if(isCurrent(rev,x)){if(typeof d.trackingToken==='string'){try{sessionStorage.setItem('panthera-order-access',d.trackingToken)}catch{}}window.pantheraAnalytics?.track('InitiateCheckout',activeQuote.pre_tax_total_cents,x.quantity);location.assign(url.href);}
   }catch{if(isCurrent(rev,x))status.textContent='Checkout could not open. Please try again.'}
