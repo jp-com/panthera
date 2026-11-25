@@ -1,6 +1,7 @@
 import {json,stripeClient,uuid,report} from '../lib/server.mjs';
 import {settleSession} from '../lib/settle-session.mjs';
 import {syncRefund} from '../lib/refund-sync.mjs';
+import {boundedText} from '../lib/security.mjs';
 const checkoutEvents=new Set(['checkout.session.completed','checkout.session.async_payment_succeeded','checkout.session.async_payment_failed','checkout.session.expired']);
 const refundEvents=new Set(['refund.created','refund.updated','refund.failed','charge.refunded']);
 export async function POST(req){
@@ -8,7 +9,7 @@ export async function POST(req){
  let stripe,event;
  try{
   stripe=stripeClient();
-  event=stripe.webhooks.constructEvent(await req.text(),req.headers.get('stripe-signature')||'',process.env.STRIPE_WEBHOOK_SECRET);
+  event=stripe.webhooks.constructEvent(await boundedText(req,1048576),req.headers.get('stripe-signature')||'',process.env.STRIPE_WEBHOOK_SECRET);
  }catch{return json({error:'INVALID_SIGNATURE'},400)}
  if(!event.livemode)return json({received:true});
  try{
