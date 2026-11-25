@@ -1,5 +1,7 @@
 import {db,json,input,quoteFrom,liveAllowed,report,transaction,stripeClient,uuid,SKU} from '../lib/server.mjs';
+import {issueTrackingToken,trackingReady} from '../lib/tracking-token.mjs';
 export async function POST(req){
+ if(!trackingReady(process.env.ORDER_TRACKING_KEY))return json({error:'CHECKOUT_DISABLED'},503);
  if(!liveAllowed())return json({error:'CHECKOUT_DISABLED'},503);
  let x;try{x=await input(req);if(!uuid.test(x.request_id))throw Error()}catch{return json({error:'INVALID_REQUEST'},400)}
  const origin=process.env.STORE_ORIGIN;
@@ -43,6 +45,6 @@ export async function POST(req){
  if(saved.rowCount!==1)throw Error('Session association failed');
  }
  if(session.status!=='open'||!session.url||session.livemode!==true)return json({error:'SESSION_NOT_OPEN'},409);
- return json({url:session.url});
+ return json({url:session.url,trackingToken:issueTrackingToken(order.id,process.env.ORDER_TRACKING_KEY)});
  }catch(e){report(e,'checkout');return json({error:'CHECKOUT_TEMPORARILY_UNAVAILABLE'},503)}
 }
