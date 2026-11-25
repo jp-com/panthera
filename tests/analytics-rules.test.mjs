@@ -1,0 +1,5 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {marketingAllowed,marketingEvent} from '../lib/analytics-rules.mjs';
+const config={marketingEnabled:true,metaPixelId:'123456789012'};
+test('marketing opt in and valid config required',()=>{assert.equal(marketingAllowed(config,'accepted'),true);for(const consent of ['unknown','declined',undefined])assert.equal(marketingAllowed(config,consent),false);assert.equal(marketingAllowed({...config,marketingEnabled:false},'accepted'),false);assert.equal(marketingAllowed({...config,metaPixelId:'invalid'},'accepted'),false)});
+test('standard events use currency and server-derived price',()=>{const e=marketingEvent('AddToCart',74500,1);assert.equal(e.value,745);assert.equal(e.currency,'USD');assert.deepEqual(e.content_ids,['PANTHER-BLACK-80']);assert.equal(e.num_items,1)});
+test('invalid values and unverified purchase events rejected',()=>{assert.equal(marketingEvent('Purchase',74500),null);assert.equal(marketingEvent('AddToCart',-1),null);assert.equal(marketingEvent('InitiateCheckout',100,0),null)});
