@@ -1,13 +1,14 @@
 import {authorize} from '../lib/admin-auth.mjs';
 import {validateAction,transition} from '../lib/admin-rules.mjs';
 import {json,transaction,report,SKU} from '../lib/server.mjs';
+import {boundedText,jsonContent,exactOrigin} from '../lib/security.mjs';
 function error(code){const e=new Error(code);e.code=code;throw e}
 export async function POST(req){
  if(!authorize(req.headers.get('authorization'),process.env.ADMIN_ACCESS_TOKEN))return json({error:'UNAUTHORIZED'},401);
  if(process.env.ADMIN_WRITE_ENABLED!=='true')return json({error:'ADMIN_WRITES_DISABLED'},403);
- if(!process.env.ADMIN_ORIGIN||req.headers.get('origin')!==process.env.ADMIN_ORIGIN)return json({error:'INVALID_ORIGIN'},403);
- if(!req.headers.get('content-type')?.startsWith('application/json'))return json({error:'INVALID_REQUEST'},400);
- let a;try{const raw=await req.text();if(raw.length>4096)throw Error();a=validateAction(JSON.parse(raw));if(!a)throw Error()}catch{return json({error:'INVALID_REQUEST'},400)}
+ if(!exactOrigin(req,process.env.ADMIN_ORIGIN))return json({error:'INVALID_ORIGIN'},403);
+ if(!jsonContent(req))return json({error:'INVALID_REQUEST'},400);
+ let a;try{const raw=await boundedText(req,4096);a=validateAction(JSON.parse(raw));if(!a)throw Error()}catch{return json({error:'INVALID_REQUEST'},400)}
  try{
  await transaction(async c=>{
  let before,after,target;
