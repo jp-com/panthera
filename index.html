@@ -40,12 +40,77 @@ function ph(el,code,label,ratio){el.innerHTML=icon+`<span class="code">${code}</
 document.querySelectorAll('[data-ph]').forEach(el=>ph(el,...el.dataset.ph.split('|')));
 const shots=[['P01','Primary campaign · hero','4:5'],['P02','Studio · three-quarter view','4:5'],['P03','Studio · side profile','4:5'],['P04','Studio · front view','4:5'],['P05','Studio · rear view','4:5'],['P08','Shoulder and surface detail','4:5'],['P10','Scale photograph','4:5'],['P12','Alternative interior','4:5']];let slide=0,qty=0,ship='sea',lastFocus=null;
 function gallery(){ph(document.querySelector('#hero-placeholder'),...shots[slide]);document.querySelector('#gallerycount').textContent=String(slide+1).padStart(2,'0')+' / 08';document.querySelector('#dots').innerHTML=shots.map((s,i)=>`<button class="${i===slide?'active':''}" aria-label="View image ${i+1}" ${i===slide?'aria-current="true"':''} data-slide="${i}"></button>`).join('');document.querySelectorAll('[data-slide]').forEach(b=>b.onclick=()=>{slide=+b.dataset.slide;gallery();document.querySelector(`[data-slide="${slide}"]`).focus()})}gallery();document.querySelector('#prev').onclick=()=>{slide=(slide+7)%8;gallery()};document.querySelector('#next').onclick=()=>{slide=(slide+1)%8;gallery()};let sx;const hero=document.querySelector('#hero-placeholder');hero.addEventListener('touchstart',e=>sx=e.changedTouches[0].clientX,{passive:true});hero.addEventListener('touchend',e=>{let dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>45){slide=(slide+(dx<0?1:7))%8;gallery()}},{passive:true});
-function money(n){return '$'+n.toLocaleString('en-US')};function cart(){document.querySelector('#bagcount').textContent=`Bag (${qty})`;document.querySelector('#bagtitle').textContent=`Your bag (${qty})`;const el=document.querySelector('#cartcontent');if(!qty){el.innerHTML='<div class="empty">Your bag is empty.</div><button class="cta" id="continue">Continue shopping</button>';document.querySelector('#continue').onclick=closeBag;return}el.innerHTML=`<div class="item"><div class="ph" id="cartph"></div><div><strong>The Panther</strong><p class="small muted">80 cm sculpture in gloss black</p><p>${money(745*qty)}</p><div class="qty"><button id="minus" aria-label="Decrease quantity">−</button><span>${qty}</span><button id="plus" aria-label="Increase quantity">+</button></div></div></div><hr><strong>Delivery preference</strong><label><input type="radio" name="shipping" value="sea" ${ship==='sea'?'checked':''}> Standard delivery (included for eligible destinations)</label><label><input type="radio" name="shipping" value="air" ${ship==='air'?'checked':''}> Priority air · quote pending</label><hr><div class="row"><span>Merchandise subtotal</span><strong>${money(745*qty)}</strong></div><p class="small muted">${ship==='air'?'Air delivery quote pending destination.':'Standard delivery included for eligible destinations.'} Applicable taxes and final delivery options are not yet confirmed.</p><hr><button id="checkout" class="cta">Checkout preview</button><p class="prototype">No payment or order is processed.</p>`;ph(document.querySelector('#cartph'),'P15','Product cutout','4:5');document.querySelector('#minus').onclick=()=>{qty--;cart()};document.querySelector('#plus').onclick=()=>{qty++;cart()};document.querySelectorAll('input[name=shipping]').forEach(r=>r.onchange=()=>{ship=r.value;cart()});document.querySelector('#checkout').onclick=()=>showModal('Checkout is not connected. The live store will confirm destination, delivery cost, taxes and payment before accepting an order.')}
-function openBag(){lastFocus=document.activeElement;cart();document.querySelector('#drawer').classList.add('open');document.querySelector('#close').focus();document.body.style.overflow='hidden'}function closeBag(){document.querySelector('#drawer').classList.remove('open');document.body.style.overflow='';lastFocus?.focus()}document.querySelectorAll('.add').forEach(b=>b.onclick=()=>{qty++;openBag()});document.querySelectorAll('.openbag').forEach(b=>b.onclick=openBag);document.querySelector('#close').onclick=closeBag;document.querySelector('#drawer').onclick=e=>{if(e.target.id==='drawer')closeBag()};function showModal(s){document.querySelector('#message').textContent=s;document.querySelector('#modal').classList.add('open');document.querySelector('#closemodal').focus()}function closeModal(){document.querySelector('#modal').classList.remove('open')}document.querySelector('#closemodal').onclick=closeModal;document.querySelector('#okmodal').onclick=closeModal;document.querySelectorAll('.pending').forEach(b=>b.onclick=()=>showModal(b.dataset.msg));document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.querySelector('#modal').classList.contains('open'))closeModal();else closeBag()}});
+let unitCents=74500, liveAvailable=false, productLoaded=false, checkoutRequest=null, activeQuote=null, cartRevision=0, checkoutBusy=false; let destinations=[];
+const formatUSD=c=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(c/100);
+function money(n){return formatUSD(n*100)};
+function resetQuote(){cartRevision++;checkoutRequest=null;activeQuote=null;}
+function cart(){document.querySelector('#bagcount').textContent=`Bag (${qty})`;document.querySelector('#bagtitle').textContent=`Your bag (${qty})`;const el=document.querySelector('#cartcontent');if(!qty){el.innerHTML='<div class="empty">Your bag is empty.</div><button class="cta" id="continue">Continue shopping</button>';document.querySelector('#continue').onclick=closeBag;return}el.innerHTML=`<div class="item"><div class="ph" id="cartph"></div><div><strong>The Panther</strong><p class="small muted">80 cm sculpture in gloss black</p><p>${formatUSD(unitCents*qty)}</p><div class="qty"><button id="minus" aria-label="Decrease quantity">−</button><span>${qty}</span><button id="plus" aria-label="Increase quantity" ${qty>=10?'disabled':''}>+</button></div></div></div><hr><strong>Delivery preference</strong><label><input type="radio" name="shipping" value="sea" ${ship==='sea'?'checked':''}> Standard delivery (included for eligible destinations)</label><label><input type="radio" name="shipping" value="air" ${ship==='air'?'checked':''}> Priority air delivery</label><hr><div class="row"><span>Merchandise subtotal</span><strong>${formatUSD(unitCents*qty)}</strong></div><p class="small muted">${ship==='air'?'Air delivery quote pending destination.':'Standard delivery included for eligible destinations.'} Applicable taxes and final delivery options are not yet confirmed.</p><hr><div id="destinationFields"></div><p id="quoteStatus" class="small" role="status" aria-live="polite"></p><button id="checkout" class="cta" ${!liveAvailable||checkoutBusy?'disabled':''}> ${liveAvailable?'Continue to checkout':'Checkout unavailable'} </button><p class="prototype">${liveAvailable?'Payment is securely processed by Stripe.':'Online orders are not open yet.'}</p>`;ph(document.querySelector('#cartph'),'P15','Product cutout','4:5');document.querySelector('#minus').onclick=()=>{if(checkoutBusy)return;qty--;resetQuote();cart()};document.querySelector('#plus').onclick=()=>{if(checkoutBusy)return;qty=Math.min(qty+1,10);resetQuote();cart()};document.querySelectorAll('input[name=shipping]').forEach(r=>r.onchange=()=>{if(checkoutBusy){cart();return}ship=r.value;resetQuote();cart()});wireCheckout()}
+function openBag(){lastFocus=document.activeElement;cart();document.querySelector('#drawer').classList.add('open');document.querySelector('#close').focus();document.body.style.overflow='hidden'}function closeBag(){document.querySelector('#drawer').classList.remove('open');document.body.style.overflow='';lastFocus?.focus()}document.querySelectorAll('.add').forEach(b=>b.onclick=()=>{if(checkoutBusy)return;qty=Math.min(qty+1,10);resetQuote();openBag()});document.querySelectorAll('.openbag').forEach(b=>b.onclick=openBag);document.querySelector('#close').onclick=closeBag;document.querySelector('#drawer').onclick=e=>{if(e.target.id==='drawer')closeBag()};function showModal(s){document.querySelector('#message').textContent=s;document.querySelector('#modal').classList.add('open');document.querySelector('#closemodal').focus()}function closeModal(){document.querySelector('#modal').classList.remove('open')}document.querySelector('#closemodal').onclick=closeModal;document.querySelector('#okmodal').onclick=closeModal;document.querySelectorAll('.pending').forEach(b=>b.onclick=()=>showModal(b.dataset.msg));document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.querySelector('#modal').classList.contains('open'))closeModal();else closeBag()}});
 for(const mode of ['desktop','mobile'])document.querySelector('#'+mode).onclick=()=>{document.querySelector('#frame').classList.toggle('mobile',mode==='mobile');document.querySelector('#desktop').setAttribute('aria-pressed',mode==='desktop');document.querySelector('#mobile').setAttribute('aria-pressed',mode==='mobile');window.scrollTo(0,0)};const frame=document.querySelector('#frame'),sticky=document.querySelector('#sticky'),maincta=document.querySelector('#maincta'),closingcta=document.querySelector('.closing .cta');
 function syncSticky(){const r=frame.getBoundingClientRect();frame.style.setProperty('--frame-left',r.left+'px');frame.style.setProperty('--frame-width',r.width+'px');const c=maincta.getBoundingClientRect(),end=closingcta.getBoundingClientRect();const closingVisible=end.top<innerHeight-65&&end.bottom>0;sticky.classList.toggle('show',r.width<=680&&c.bottom<0&&!closingVisible&&r.bottom>85)}
 window.addEventListener('scroll',syncSticky,{passive:true});window.addEventListener('resize',syncSticky);new ResizeObserver(syncSticky).observe(frame);syncSticky();
 // Keyboard focus confinement for prototype dialogs.
 let modalFocus=null;const prevShow=showModal;showModal=function(s){modalFocus=document.activeElement;prevShow(s)};const prevClose=closeModal;closeModal=function(){prevClose();modalFocus?.focus()};document.querySelector('#closemodal').onclick=closeModal;document.querySelector('#okmodal').onclick=closeModal;
 document.addEventListener('keydown',e=>{if(e.key!=='Tab')return;const active=document.querySelector('.modal.open')||document.querySelector('.drawer.open');if(!active)return;const f=[...active.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),summary')].filter(el=>el.getClientRects().length);if(!f.length)return;if(e.shiftKey&&(document.activeElement===f[0]||!active.contains(document.activeElement))){e.preventDefault();f.at(-1).focus()}else if(!e.shiftKey&&(document.activeElement===f.at(-1)||!active.contains(document.activeElement))){e.preventDefault();f[0].focus()}});
+
+let destination='';
+function wireCheckout(){
+ const holder=document.querySelector('#destinationFields'),status=document.querySelector('#quoteStatus'),btn=document.querySelector('#checkout');
+ if(!holder||!status||!btn)return;
+ if(!liveAvailable){btn.disabled=true;return}
+ const label=document.createElement('label');label.textContent='Delivery country';
+ const select=document.createElement('select');select.style.cssText='display:block;width:100%;font:inherit;margin:8px 0 16px;padding:12px;background:transparent;border:1px solid currentColor;border-radius:0';select.setAttribute('aria-label','Delivery country');
+ const blank=document.createElement('option');blank.value='';blank.textContent='Select country';select.append(blank);
+ const codes=[...new Set(destinations.filter(d=>d.method===ship).map(d=>d.country_code))];
+ let names;try{names=new Intl.DisplayNames(['en'],{type:'region'})}catch{}
+ for(const code of codes){const opt=document.createElement('option');opt.value=code;opt.textContent=names?.of(code)||code;select.append(opt)}
+ if(!codes.includes(destination))destination='';
+ select.value=destination;label.append(select);holder.append(label);
+ select.disabled=checkoutBusy;btn.disabled=!destination||checkoutBusy;
+ if(!codes.length)status.textContent='Delivery is not available for this shipping method.';
+ const current=()=>({quantity:qty,country:destination,method:ship});
+ const isCurrent=(rev,x)=>rev===cartRevision&&qty===x.quantity&&destination===x.country&&ship===x.method;
+ async function getQuote(){
+  const rev=cartRevision,x=current();btn.disabled=true;status.textContent='Checking delivery…';
+  try{
+   const r=await fetch('/api/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x),cache:'no-store'});
+   const q=await r.json();if(!isCurrent(rev,x))return;
+   if(!r.ok||!q.ok||!Number.isSafeInteger(q.pre_tax_total_cents)||q.quantity!==x.quantity||q.country!==x.country||q.method!==x.method)throw Error();
+   activeQuote=q;status.textContent='Delivery '+formatUSD(q.shipping_cents)+' · Total '+formatUSD(q.pre_tax_total_cents)+' · '+q.min_business_days+'–'+q.max_business_days+' business days';btn.disabled=checkoutBusy;
+  }catch{if(isCurrent(rev,x)){activeQuote=null;status.textContent='Delivery or checkout is currently unavailable.';btn.disabled=true}}
+ }
+ select.onchange=()=>{destination=select.value;resetQuote();if(destination)getQuote();else{status.textContent='';btn.disabled=true}};
+ btn.onclick=async()=>{
+  if(checkoutBusy||!activeQuote||!destination||!liveAvailable)return;
+  const rev=cartRevision,x=current();checkoutBusy=true;
+  checkoutRequest=checkoutRequest||crypto.randomUUID();
+  btn.disabled=true;select.disabled=true;
+  document.querySelectorAll('#cartcontent .qty button,#cartcontent input').forEach(e=>e.disabled=true);
+  status.textContent='Opening secure checkout…';
+  try{
+   const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...x,request_id:checkoutRequest}),cache:'no-store'});const d=await r.json();
+   if(!r.ok||typeof d.url!=='string')throw Error();
+   const url=new URL(d.url);if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com')throw Error();
+   if(isCurrent(rev,x))location.assign(url.href);
+  }catch{if(isCurrent(rev,x))status.textContent='Checkout could not open. Please try again.'}
+  finally{checkoutBusy=false;if(isCurrent(rev,x)){select.disabled=false;btn.disabled=!activeQuote;document.querySelectorAll('#cartcontent .qty button,#cartcontent input').forEach(e=>e.disabled=false);const plus=document.querySelector('#plus');if(plus)plus.disabled=qty>=10;}}
+ };
+ if(destination)getQuote();
+}
+async function loadCommerce(){
+ try{
+  const [p,s]=await Promise.all([fetch('/api/product',{cache:'no-store'}),fetch('/api/shipping',{cache:'no-store'})]);
+  if(!p.ok||!s.ok)throw Error();
+  const data=await p.json(),shipping=await s.json();
+  if(!Number.isSafeInteger(data.unit_price_cents)||data.currency!=='USD'||data.unit_price_cents<=0||!Array.isArray(shipping.destinations))throw Error();
+  unitCents=data.unit_price_cents;destinations=shipping.destinations.filter(d=>typeof d.country_code==='string'&&/^[A-Z]{2}$/.test(d.country_code)&&['sea','air'].includes(d.method));
+  productLoaded=true;liveAvailable=data.available===true&&destinations.length>0;
+  document.querySelector('.buy .price').textContent=formatUSD(unitCents)+' USD';
+  document.querySelector('.closing p').textContent=formatUSD(unitCents)+' USD';
+  document.querySelector('#sticky strong').textContent=formatUSD(unitCents);
+ }catch{liveAvailable=false;}
+ if(document.querySelector('#drawer').classList.contains('open')){resetQuote();cart()}
+}
+loadCommerce();
+
 </script></body></html>
