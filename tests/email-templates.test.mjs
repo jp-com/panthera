@@ -1,0 +1,7 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {emailTemplate} from '../lib/email-templates.mjs';
+const order={id:'example-id',payment_status:'paid',fulfillment_status:'shipped',shipping_method:'sea',shipping_cents:0,tax_cents:0,total_cents:74500,country_code:'US'};
+test('confirmation includes totals and escapes markup',()=>{const e=emailTemplate('order_confirmation',order,[{name_snapshot:'<The Panther>',quantity:1,unit_price_cents:74500}]);assert.match(e.text,/\$745\.00/);assert.match(e.html,/&lt;The Panther&gt;/);assert.doesNotMatch(e.html,/<The Panther>/)});
+test('unpaid confirmation refused',()=>assert.throws(()=>emailTemplate('order_confirmation',{...order,payment_status:'pending'})));
+test('dispatch uses actual carrier and tracking',()=>{const e=emailTemplate('dispatch',order,[],[{carrier:'Example Carrier',tracking_number:'ABC123'}]);assert.match(e.text,/ABC123/);assert.throws(()=>emailTemplate('dispatch',order))});
+test('refund needs verified recorded amount',()=>{assert.throws(()=>emailTemplate('refund',order));assert.match(emailTemplate('refund',{...order,payment_status:'refunded',refunded_cents:74500}).text,/\$745\.00/)});
+test('internal email excludes private address',()=>{const e=emailTemplate('internal_new_order',{...order,customer_email:'private@example.com',shipping_address:{address:{line1:'Private street'}}});assert.doesNotMatch(e.text,/Private street|private@example/);assert.throws(()=>emailTemplate('internal_new_order',{...order,payment_status:'pending'}))});
