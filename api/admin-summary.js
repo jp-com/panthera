@@ -9,6 +9,6 @@ export async function GET(req){
    db().query('SELECT country_code,method,currency,per_unit_cents,min_business_days,max_business_days,enabled FROM commerce.shipping_rates ORDER BY country_code,method'),
    db().query('SELECT id,created_at,country_code,shipping_method,total_cents,refunded_cents,payment_status,fulfillment_status FROM commerce.orders ORDER BY created_at DESC LIMIT 50')
   ]);
-  return json({stats:stats.rows[0],products:product.rows,rates:rates.rows,orders:orders.rows,liveCheckout:liveAllowed()&&product.rows.some(p=>p.checkout_enabled&&p.available_for_sale&&p.on_hand>p.reserved)});
+  return json({stats:stats.rows[0],products:product.rows,rates:rates.rows,orders:orders.rows,writesEnabled:process.env.ADMIN_WRITE_ENABLED==='true'&&Boolean(process.env.ADMIN_ORIGIN),liveCheckout:liveAllowed()&&product.rows.some(p=>p.checkout_enabled&&p.available_for_sale&&p.on_hand>p.reserved)});
  }catch(e){report(e,'admin-summary');return json({error:'SERVICE_UNAVAILABLE'},503)}
 }
