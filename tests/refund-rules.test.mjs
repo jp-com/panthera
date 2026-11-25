@@ -1,0 +1,9 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {refundSummary,refundedFulfillment,reconciliationDecision} from '../lib/refund-rules.mjs';
+const r=(id,amount,status='succeeded')=>({id,amount,status,currency:'usd'});
+test('settled partial refund only',()=>assert.deepEqual(refundSummary([r('a',10000),r('b',20000,'pending'),r('c',5000,'failed')],74500),{amount:10000,status:'partially_refunded'}));
+test('full refund',()=>assert.deepEqual(refundSummary([r('a',40000),r('b',34500)],74500),{amount:74500,status:'refunded'}));
+test('zero settled refunds',()=>assert.deepEqual(refundSummary([r('a',10000,'failed')],74500),{amount:0,status:'paid'}));
+test('invalid refund data rejected',()=>{assert.throws(()=>refundSummary([r('a',80000)],74500));assert.throws(()=>refundSummary([r('a',100),r('a',100)],74500));assert.throws(()=>refundSummary([{...r('a',100),currency:'gbp'}],74500))});
+test('full refund prevents new dispatch but preserves shipped history',()=>{assert.equal(refundedFulfillment('refunded','processing'),'cancelled');assert.equal(refundedFulfillment('refunded','shipped'),'shipped');assert.equal(refundedFulfillment('partially_refunded','processing'),'processing')});
+test('reservation release fails closed when payment uncertain',()=>{assert.equal(reconciliationDecision({livemode:true,status:'expired',payment_status:'unpaid',payment_intent:null}),'expired');assert.equal(reconciliationDecision({livemode:true,status:'expired',payment_status:'unpaid',payment_intent:'pi_abc'}),'hold');assert.equal(reconciliationDecision({livemode:true,status:'complete',payment_status:'unpaid'}),'hold');assert.equal(reconciliationDecision({livemode:true,payment_status:'paid'}),'paid');assert.equal(reconciliationDecision({livemode:false,payment_status:'paid'}),'review')});
