@@ -19,6 +19,9 @@ html{scroll-behavior:smooth}body{font-variant-numeric:lining-nums}.frame{max-wid
 /* When replacing placeholders with photographs, render the full source without clipping. */
 .frame img.asset{display:block;width:100%;height:auto;object-fit:contain;max-width:100%}
 @container(max-width:680px){.frame .hero-image{aspect-ratio:4/5}.frame .wide,.frame .night{aspect-ratio:16/9}}
+/* Suppress vertical elastic overscroll without locking normal page scrolling. */
+html,body{overscroll-behavior-y:none}
+.bag{overscroll-behavior-y:none}
 </style></head><body>
 <main class="frame" id="frame">
 <header class="nav"><a class="desktop-left" href="#product">The Panther</a><a class="menu-mobile" href="#information">Info</a><a class="wordmark" href="#product" aria-label="Panthera home">PANTHERA</a><div class="right"><a href="#information">Information</a><button class="openbag" id="bagcount" aria-live="polite">Bag (0)</button></div></header>
